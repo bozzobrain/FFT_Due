@@ -19,6 +19,8 @@
 */
 #include <Adafruit_NeoPixel.h>
 #include "arduinoFFT.h"
+#define STRIP1
+#define STRIP2
 
 //#define DEBUG_SETTINGS
 
@@ -34,27 +36,27 @@
      
 #define POTENTIOMETER1                        A1
 #define POTENTIOMETER2                        A4
-#define POTENTIOMETER3                        A8
-#define POTENTIOMETER4                        A2
+#define POTENTIOMETER3                        A5
+#define POTENTIOMETER4                        A5
 #define POTENTIOMETER5                        A5
-#define POTENTIOMETER6                        A9
+#define POTENTIOMETER6                        A5
 #define POTENTIOMETER7                        A3
-#define POTENTIOMETER8                        A6
-#define POTENTIOMETER9                        A10
+#define POTENTIOMETER8                        A5
+#define POTENTIOMETER9                        A5
 
 
 //#define POTENTIOMETER_LOW_GROUP               POTENTIOMETER3
 //#define POTENTIOMETER_MID_GROUP               POTENTIOMETER6
 
-#define POTENTIOMETER_LOW_LIMIT_SCALER        POTENTIOMETER7
-#define POTENTIOMETER_MID_LIMIT_SCALER        POTENTIOMETER4
-#define POTENTIOMETER_HIGH_LIMIT_SCALER       POTENTIOMETER1
-#define POTENTIOMETER_CUTOFF_LOW              POTENTIOMETER8
-#define POTENTIOMETER_CUTOFF_MID              POTENTIOMETER5
-#define POTENTIOMETER_CUTOFF_HIGH             POTENTIOMETER2
-#define POTENTIOMETER_LOW_BRIGHTNESS          POTENTIOMETER9
-#define POTENTIOMETER_MID_BRIGHTNESS          POTENTIOMETER6
-#define POTENTIOMETER_HIGH_BRIGHTNESS         POTENTIOMETER3
+//#define POTENTIOMETER_LOW_LIMIT_SCALER        POTENTIOMETER7
+//#define POTENTIOMETER_MID_LIMIT_SCALER        POTENTIOMETER4
+//#define POTENTIOMETER_HIGH_LIMIT_SCALER       POTENTIOMETER1
+//#define POTENTIOMETER_CUTOFF_LOW              POTENTIOMETER8
+//#define POTENTIOMETER_CUTOFF_MID              POTENTIOMETER5
+//#define POTENTIOMETER_CUTOFF_HIGH             POTENTIOMETER2
+//#define POTENTIOMETER_LOW_BRIGHTNESS          POTENTIOMETER9
+//#define POTENTIOMETER_MID_BRIGHTNESS          POTENTIOMETER6
+//#define POTENTIOMETER_HIGH_BRIGHTNESS         POTENTIOMETER3
 
 //#define POTENTIOMETER_SAMPLING_FREQUENCY      POTENTIOMETER2
 
@@ -63,33 +65,37 @@
 //#define POTENTIOMETER_VOLUME_LIMIT_SCALER     POTENTIOMETER3
 
 #define USE_FILTER
+#define WEIGHT_PREVIOUS                       0.25
+
 //#define USE_BETTER_FILTER    
 #define FILTER_DEPTH                          1
 
 #define LIMIT_SCALER_BASE                     1
 
-#define CHANNEL                               A0
+#define CHANNEL                               A2
 #define SAMPLES                               64 //This value MUST ALWAYS be a power of 2
-#define SAMPLING_FREQUENCY_BASE               3000
+#define SAMPLING_FREQUENCY_BASE               12000
 #define MIN_SAMPLING_FREQ                     500
 
 #define MICROPHONE_OFFSET                     0
 
-#define NUMBER_LEDS                           150
+#define NUMBER_LEDS                           140
 
-#define NUMBER_SAMPLES_PER_GROUP              round(NUMBER_LEDS/ (SAMPLES/2))
 
-#define LOW_GROUP_BASE                        (2/16.0)
-#define MID_GROUP_BASE                        (5/16.0)
+//Adjust the number of LEDs per bin (higher equals less representation and a lower frequency represented
+#define NUMBER_SAMPLES_PER_GROUP              round((NUMBER_LEDS/ (SAMPLES/2)))
+
+#define LOW_GROUP_BASE                        (13.0/NUMBER_LEDS)
+#define MID_GROUP_BASE                        (39.0/NUMBER_LEDS)
 
 #define BRIGHTNESS_SCALER                     1
-#define CUTOFF_LIMIT_LOW_BASE                 0.07       //0.5
-#define CUTOFF_LIMIT_MID_BASE                 0.07     //0.15 //0.3
-#define CUTOFF_LIMIT_HIGH_BASE                0.07      //0.3
+#define CUTOFF_LIMIT_LOW_BASE                 0.06      
+#define CUTOFF_LIMIT_MID_BASE                 0.06     
+#define CUTOFF_LIMIT_HIGH_BASE                0.06      
 
-#define FFT_MAG_LIMIT_LOWS_BASE               7500//5000
-#define FFT_MAG_LIMIT_MIDS_BASE               7500//20000 (PIANO) (256 samples)
-#define FFT_MAG_LIMIT_HIGHS_BASE              7500//22000 (PIANO)
+#define FFT_MAG_LIMIT_LOWS_BASE               7500       //7500        //5000
+#define FFT_MAG_LIMIT_MIDS_BASE               7500                      //20000 (PIANO) (256 samples)
+#define FFT_MAG_LIMIT_HIGHS_BASE              7000                      //22000 (PIANO)
 #define FFT_MAG_LIMIT_MIN                     350
 
 #define BRIGHTNESS_LOW_BASE                   1
@@ -98,11 +104,14 @@
 
 #define FFT_MAG_LIMIT_VOLUME_BASE             1000
 
+
 Adafruit_NeoPixel strip1 = Adafruit_NeoPixel(NUMBER_LEDS, 2, NEO_GRB + NEO_KHZ800);
+#ifdef STRIP2
 Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(NUMBER_LEDS, 3, NEO_GRB + NEO_KHZ800);
+#endif
 arduinoFFT FFT = arduinoFFT(); /* Create FFT object */
 
-float samplingFrequency = SAMPLING_FREQUENCY_BASE;  //Hz, must be less than 10000 due to ADC
+uint16_t samplingFrequency = SAMPLING_FREQUENCY_BASE;  //Hz, must be less than 10000 due to ADC
 unsigned int sampling_period_us = round(1000000*(1.0/samplingFrequency));
 unsigned long microseconds;
 
@@ -143,17 +152,23 @@ double vImag[SAMPLES];
 
 void setup()
 {
+  //ADCSRA=0x87;  //Typical 125khz
+//  ADCSRA=0x00;
+//  ADCSRA=0x86;  //250kHz
+    
   Serial.begin(115200);
   Serial.println("Ready");
   strip1.begin();
   strip1.show(); // Initialize all pixels to 'off'
+#ifdef STRIP2
   strip2.begin();
   strip2.show(); // Initialize all pixels to 'off'
+ #endif
 }
 
 void loop()
 {
-  UpdatePotentiometers();
+  //UpdatePotentiometers();
 
   /*SAMPLING*/
   microseconds = micros();
@@ -173,7 +188,6 @@ void loop()
   FFT.Compute(vReal, vImag, SAMPLES, FFT_FORWARD); /* Compute FFT */
   FFT.ComplexToMagnitude(vReal, vImag, SAMPLES); /* Compute magnitudes */
 
-
 #ifdef USE_FILTER
   static int counter = 0;
   for(int i=0; i<SAMPLES/2; i++)
@@ -192,7 +206,7 @@ void loop()
       
       vRealSmoother[i] = (vRealSmoother[i] + (double)vRealFilt[FILTER_DEPTH][i]) / 2; //vRealFilt[FILTER_DEPTH][i];//
   #else
-      vRealSmoother[i]= (vRealSmoother[i]*0.25 + vReal[i]*0.75);
+      vRealSmoother[i]= (vRealSmoother[i]*WEIGHT_PREVIOUS + vReal[i]*(1.0-WEIGHT_PREVIOUS));
       //vRealSmoother[i] = vReal[i];
   #endif
   }
@@ -215,7 +229,7 @@ void loop()
     DisplayFFTResponse(vReal);
   else
     DisplayAmbientNoiseMeter(vReal);
-=
+
 #endif
 
   //delay(1000);
@@ -295,13 +309,15 @@ void DisplayFFTResponse(double * values)
     }
     
     strip1.setPixelColor((i), colorSelector);
+#ifdef STRIP2
     strip2.setPixelColor((i), colorSelector);
+ #endif
     
     subSamples++;
     if(subSamples>NUMBER_SAMPLES_PER_GROUP)
     {
       j++;
-      if(j>SAMPLES)
+      if(j>SAMPLES/2)
         break;
       subSamples=0;
     }
@@ -309,9 +325,11 @@ void DisplayFFTResponse(double * values)
   
   //Output to the LEDs
   strip1.show();
+#ifdef STRIP2
   strip2.show();
+#endif
   
-  delay(1); /* Repeat after delay */
+  //delay(1); /* Repeat after delay */
 }
 
 void DisplayAmbientNoiseMeter(double * values)
@@ -394,10 +412,14 @@ void DisplayAmbientNoiseMeter(double * values)
     }
     
     strip1.setPixelColor(i, colorSelector);    
+#ifdef STRIP2
     strip2.setPixelColor(i, colorSelector);
+ #endif
   }
   strip1.show();
+#ifdef STRIP2
   strip2.show();
+ #endif
   //delay(5);
 }
 
